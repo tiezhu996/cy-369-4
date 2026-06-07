@@ -1,20 +1,33 @@
 import { useEffect, useState } from "react";
-import { Button, ConfigProvider, Layout, Typography, theme } from "antd";
+import { Button, ConfigProvider, Layout, Typography, theme, message } from "antd";
 import { ApiOutlined } from "@ant-design/icons";
 import { fetchOverview } from "./api/client";
 import { APP_CODE, APP_NAME, APP_THEME } from "./constants/app";
 import { REQUEST_MESSAGES } from "./constants/messages";
 import { createFallbackOverview } from "./state/dashboard";
-import type { OverviewResponse } from "./types";
+import type { OverviewResponse, Booking } from "./types";
 import { FeatureStrip } from "./components/FeatureStrip";
 import { MetricGrid } from "./components/MetricGrid";
 import { OperationsTable } from "./components/OperationsTable";
+import { CampsiteCalendar } from "./components/CampsiteCalendar";
+import { campsites, bookings as initialBookings, maintenanceRecords } from "./data/campsite";
 
 const { Header, Content } = Layout;
 
 export default function App() {
   const [overview, setOverview] = useState<OverviewResponse>(createFallbackOverview());
   const [notice, setNotice] = useState(REQUEST_MESSAGES.overviewFallback);
+  const [bookings, setBookings] = useState<Booking[]>(initialBookings);
+
+  const handleAddBooking = (bookingData: Omit<Booking, "id" | "status">) => {
+    const newBooking: Booking = {
+      ...bookingData,
+      id: `bk-${Date.now()}`,
+      status: "confirmed",
+    };
+    setBookings([...bookings, newBooking]);
+    message.success(`预约成功！${bookingData.customerName} 已成功预约`);
+  };
 
   useEffect(() => {
     fetchOverview()
@@ -58,6 +71,15 @@ export default function App() {
           <section className="work-panel">
             <Typography.Title level={3}>运营任务流</Typography.Title>
             <OperationsTable records={overview.records} />
+          </section>
+
+          <section className="work-panel">
+            <CampsiteCalendar
+              campsites={campsites}
+              bookings={bookings}
+              maintenanceRecords={maintenanceRecords}
+              onAddBooking={handleAddBooking}
+            />
           </section>
         </Content>
       </Layout>
