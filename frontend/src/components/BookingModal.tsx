@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Modal, Form, Input, DatePicker, Select, InputNumber, Alert, Card, Tag } from "antd";
 import type { Campsite, Booking, MaintenanceRecord } from "../types";
-import { isCampsiteAvailableForBooking } from "../utils/calendarUtils";
+import { isCampsiteAvailableForBooking, formatLocalDate, isDateInMaintenanceRange } from "../utils/calendarUtils";
 import dayjs, { Dayjs } from "dayjs";
 
 interface BookingModalProps {
@@ -74,25 +74,49 @@ export function BookingModal({
         setFormValues(allValues);
     };
 
-    const campsiteOptions = campsites.map((campsite) => {
-        const hasActiveMaintenance = maintenanceRecords.some(
-            (m) => m.campsiteId === campsite.id && m.status !== "completed"
-        );
-        return {
-            label: (
-                <span style={{ opacity: hasActiveMaintenance ? 0.5 : 1 }}>
-                    {campsite.name}
-                    {hasActiveMaintenance && (
-                        <Tag color="orange" style={{ marginLeft: 8 }}>
-                            维修中
-                        </Tag>
-                    )}
-                </span>
-            ),
-            value: campsite.id,
-            disabled: hasActiveMaintenance,
-        };
-    });
+    const todayStr = useMemo(() => formatLocalDate(new Date()), []);
+
+    const campsiteOptions = useMemo(() => {
+        const today = new Date();
+        const todayDateOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+        return campsites.map((campsite) => {
+            const currentMaintenance = maintenanceRecords.find(
+                (m) =>
+                    m.campsiteId === campsite.id &&
+                    m.status === "in_progress" &&
+                    isDateInMaintenanceRange(todayStr, m.startDate, m.endDate)
+            );
+
+            const hasUpcomingMaintenance = maintenanceRecords.some(
+                (m) => {
+                    if (m.campsiteId !== campsite.id || m.status === "completed") return false;
+                    const startDate = new Date(m.startDate);
+                    return startDate >= todayDateOnly;
+                }
+            );
+
+            return {
+                label: (
+                    <span>
+                        {campsite.name}
+                        {currentMaintenance && (
+                            <Tag color="orange" style={{ marginLeft: 8 }}>
+                                维修中
+                            </Tag>
+                        )}
+                        {!currentMaintenance && hasUpcomingMaintenance && (
+                            <Tag color="gold" style={{ marginLeft: 8 }}>
+                                有维修计划
+                            </Tag>
+                        )}
+                    </span>
+                ),
+                value: campsite.id,
+                disabled: false,
+            };
+        });
+    }, [campsites, maintenanceRecords, todayStr]);
 
     const selectedCampsite = campsites.find((c) => c.id === selectedCampsiteId);
 

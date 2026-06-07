@@ -1,12 +1,28 @@
 import type { Campsite, Booking, MaintenanceRecord, DayCampsiteStatus, CampsiteStatus } from "../types";
 
-export function isDateInRange(date: string, startDate: string, endDate: string): boolean {
-    const d = new Date(date);
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    d.setHours(0, 0, 0, 0);
-    start.setHours(0, 0, 0, 0);
-    end.setHours(0, 0, 0, 0);
+export function formatLocalDate(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+}
+
+export function parseLocalDate(dateStr: string): Date {
+    const [year, month, day] = dateStr.split("-").map(Number);
+    return new Date(year, month - 1, day);
+}
+
+export function isDateInBookingRange(date: string, checkInDate: string, checkOutDate: string): boolean {
+    const d = parseLocalDate(date);
+    const checkIn = parseLocalDate(checkInDate);
+    const checkOut = parseLocalDate(checkOutDate);
+    return d >= checkIn && d < checkOut;
+}
+
+export function isDateInMaintenanceRange(date: string, startDate: string, endDate: string): boolean {
+    const d = parseLocalDate(date);
+    const start = parseLocalDate(startDate);
+    const end = parseLocalDate(endDate);
     return d >= start && d <= end;
 }
 
@@ -17,7 +33,7 @@ export function getCampsiteStatusForDate(
     maintenanceRecords: MaintenanceRecord[]
 ): DayCampsiteStatus {
     const maintenance = maintenanceRecords.find(
-        (m) => m.campsiteId === campsite.id && isDateInRange(date, m.startDate, m.endDate) && m.status !== "completed"
+        (m) => m.campsiteId === campsite.id && isDateInMaintenanceRange(date, m.startDate, m.endDate) && m.status !== "completed"
     );
 
     if (maintenance) {
@@ -31,7 +47,7 @@ export function getCampsiteStatusForDate(
     }
 
     const booking = bookings.find(
-        (b) => b.campsiteId === campsite.id && isDateInRange(date, b.checkInDate, b.checkOutDate) && b.status !== "cancelled"
+        (b) => b.campsiteId === campsite.id && isDateInBookingRange(date, b.checkInDate, b.checkOutDate) && b.status !== "cancelled"
     );
 
     if (booking) {
@@ -89,7 +105,7 @@ export function getDaysInMonth(year: number, month: number): Date[] {
 }
 
 export function formatDateKey(date: Date): string {
-    return date.toISOString().split("T")[0];
+    return formatLocalDate(date);
 }
 
 export function getStatusColor(status: CampsiteStatus): string {
@@ -125,14 +141,14 @@ export function isCampsiteAvailableForBooking(
     bookings: Booking[],
     maintenanceRecords: MaintenanceRecord[]
 ): { available: boolean; reason?: string } {
-    const checkIn = new Date(checkInDate);
-    const checkOut = new Date(checkOutDate);
+    const checkIn = parseLocalDate(checkInDate);
+    const checkOut = parseLocalDate(checkOutDate);
 
-    for (let d = new Date(checkIn); d <= checkOut; d.setDate(d.getDate() + 1)) {
+    for (let d = new Date(checkIn); d < checkOut; d.setDate(d.getDate() + 1)) {
         const dateStr = formatDateKey(d);
 
         const maintenance = maintenanceRecords.find(
-            (m) => m.campsiteId === campsiteId && isDateInRange(dateStr, m.startDate, m.endDate) && m.status !== "completed"
+            (m) => m.campsiteId === campsiteId && isDateInMaintenanceRange(dateStr, m.startDate, m.endDate) && m.status !== "completed"
         );
 
         if (maintenance) {
@@ -143,7 +159,7 @@ export function isCampsiteAvailableForBooking(
         }
 
         const booking = bookings.find(
-            (b) => b.campsiteId === campsiteId && isDateInRange(dateStr, b.checkInDate, b.checkOutDate) && b.status !== "cancelled"
+            (b) => b.campsiteId === campsiteId && isDateInBookingRange(dateStr, b.checkInDate, b.checkOutDate) && b.status !== "cancelled"
         );
 
         if (booking) {

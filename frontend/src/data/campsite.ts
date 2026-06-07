@@ -1,4 +1,5 @@
 import type { Campsite, Booking, MaintenanceRecord } from "../types";
+import { formatLocalDate } from "../utils/calendarUtils";
 
 export const campsites: Campsite[] = [
   {
@@ -76,7 +77,7 @@ export const campsites: Campsite[] = [
 ];
 
 const today = new Date();
-const formatDate = (d: Date) => d.toISOString().split("T")[0];
+const formatDate = (d: Date) => formatLocalDate(d);
 const addDays = (d: Date, days: number) => {
   const result = new Date(d);
   result.setDate(result.getDate() + days);
