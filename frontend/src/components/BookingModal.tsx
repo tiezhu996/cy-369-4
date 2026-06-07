@@ -3,6 +3,7 @@ import { Modal, Form, Input, DatePicker, Select, InputNumber, Alert, Card, Tag }
 import type { Campsite, Booking, MaintenanceRecord } from "../types";
 import { isCampsiteAvailableForBooking, formatLocalDate, isDateInMaintenanceRange } from "../utils/calendarUtils";
 import dayjs, { Dayjs } from "dayjs";
+import type { FormInstance } from "antd";
 
 interface BookingModalProps {
     open: boolean;
@@ -13,6 +14,7 @@ interface BookingModalProps {
     preselectedDate?: string;
     onClose: () => void;
     onSubmit: (booking: Omit<Booking, "id" | "status">) => void;
+    form?: FormInstance<BookingFormValues>;
 }
 
 interface BookingFormValues {
@@ -32,28 +34,91 @@ export function BookingModal({
     preselectedDate,
     onClose,
     onSubmit,
+    form: propForm,
 }: BookingModalProps) {
-    const [form] = Form.useForm<BookingFormValues>();
-    const [selectedCampsiteId, setSelectedCampsiteId] = useState<string | undefined>(preselectedCampsiteId);
+    const [internalForm] = Form.useForm<BookingFormValues>();
+    const form = propForm || internalForm;
     const [availabilityCheck, setAvailabilityCheck] = useState<{ available: boolean; reason?: string } | null>(null);
-    const [formValues, setFormValues] = useState<BookingFormValues | null>(null);
+    const [conflictWarning, setConflictWarning] = useState<string | null>(null);
+
+    const watchDateRange = Form.useWatch("dateRange", form);
+    const watchCampsiteId = Form.useWatch("campsiteId", form);
+    const watchGuestCount = Form.useWatch("guestCount", form);
+    const watchCustomerName = Form.useWatch("customerName", form);
+    const watchPhone = Form.useWatch("phone", form);
+
+    const selectedCampsiteId = watchCampsiteId;
+
+    const formValues = useMemo(() => {
+        if (!watchDateRange && !watchCampsiteId && !watchGuestCount && !watchCustomerName && !watchPhone) {
+            return null;
+        }
+        return {
+            dateRange: watchDateRange,
+            campsiteId: watchCampsiteId,
+            guestCount: watchGuestCount,
+            customerName: watchCustomerName,
+            phone: watchPhone,
+        } as BookingFormValues;
+    }, [watchDateRange, watchCampsiteId, watchGuestCount, watchCustomerName, watchPhone]);
+
+    const handleValuesChange = (_: Partial<BookingFormValues>, allValues: BookingFormValues) => {
+        // Values are now tracked via useWatch
+    };
+
+    const todayStr = useMemo(() => formatLocalDate(new Date()), []);
+
+    const campsiteAvailabilities = useMemo(() => {
+        if (!formValues?.dateRange || !formValues.dateRange[0] || !formValues.dateRange[1]) {
+            return null;
+        }
+
+        const checkIn = formValues.dateRange[0].format("YYYY-MM-DD");
+        const checkOut = formValues.dateRange[1].format("YYYY-MM-DD");
+
+        return campsites.reduce((acc, campsite) => {
+            const check = isCampsiteAvailableForBooking(
+                campsite.id,
+                checkIn,
+                checkOut,
+                bookings,
+                maintenanceRecords
+            );
+            acc[campsite.id] = check;
+            return acc;
+        }, {} as Record<string, { available: boolean; reason?: string }>);
+    }, [formValues?.dateRange?.[0]?.valueOf(), formValues?.dateRange?.[1]?.valueOf(), campsites, bookings, maintenanceRecords]);
 
     useEffect(() => {
         if (open) {
-            if (preselectedCampsiteId) {
-                setSelectedCampsiteId(preselectedCampsiteId);
-                setTimeout(() => form.setFieldsValue({ campsiteId: preselectedCampsiteId }), 0);
-            }
             if (preselectedDate) {
                 const date = dayjs(preselectedDate);
                 setTimeout(() => form.setFieldsValue({ dateRange: [date, date.add(1, "day")] }), 0);
             }
+            if (preselectedCampsiteId) {
+                setTimeout(() => form.setFieldsValue({ campsiteId: preselectedCampsiteId }), 0);
+            }
+            setConflictWarning(null);
         } else {
-            setSelectedCampsiteId(undefined);
             setAvailabilityCheck(null);
-            setFormValues(null);
+            setConflictWarning(null);
+            form.resetFields();
         }
     }, [open, preselectedCampsiteId, preselectedDate, form]);
+
+    useEffect(() => {
+        if (campsiteAvailabilities && selectedCampsiteId) {
+            const availability = campsiteAvailabilities[selectedCampsiteId];
+            if (availability && !availability.available) {
+                setConflictWarning(
+                    `您预选的营位在所选日期范围内不可预约：${availability.reason}。请选择其他营位或调整日期。`
+                );
+                form.setFieldsValue({ campsiteId: undefined });
+            } else {
+                setConflictWarning(null);
+            }
+        }
+    }, [campsiteAvailabilities, selectedCampsiteId, form]);
 
     useEffect(() => {
         if (formValues?.campsiteId && formValues?.dateRange && formValues.dateRange[0] && formValues.dateRange[1]) {
@@ -70,17 +135,32 @@ export function BookingModal({
         }
     }, [formValues?.campsiteId, formValues?.dateRange?.[0]?.valueOf(), formValues?.dateRange?.[1]?.valueOf(), bookings, maintenanceRecords]);
 
-    const handleValuesChange = (_: Partial<BookingFormValues>, allValues: BookingFormValues) => {
-        setFormValues(allValues);
-    };
-
-    const todayStr = useMemo(() => formatLocalDate(new Date()), []);
-
     const campsiteOptions = useMemo(() => {
         const today = new Date();
         const todayDateOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
         return campsites.map((campsite) => {
+            const availability = campsiteAvailabilities?.[campsite.id];
+
+            if (availability && !availability.available) {
+                const isMaintenance = availability.reason?.includes("维修");
+                return {
+                    label: (
+                        <span style={{ opacity: 0.5 }}>
+                            {campsite.name}
+                            <Tag color={isMaintenance ? "orange" : "red"} style={{ marginLeft: 8 }}>
+                                {isMaintenance ? "维修中" : "已占用"}
+                            </Tag>
+                            <div style={{ fontSize: 11, color: "#999", marginTop: 2 }}>
+                                {availability.reason}
+                            </div>
+                        </span>
+                    ),
+                    value: campsite.id,
+                    disabled: true,
+                };
+            }
+
             const currentMaintenance = maintenanceRecords.find(
                 (m) =>
                     m.campsiteId === campsite.id &&
@@ -110,13 +190,18 @@ export function BookingModal({
                                 有维修计划
                             </Tag>
                         )}
+                        {availability?.available && (
+                            <Tag color="green" style={{ marginLeft: 8 }}>
+                                可预约
+                            </Tag>
+                        )}
                     </span>
                 ),
                 value: campsite.id,
                 disabled: false,
             };
         });
-    }, [campsites, maintenanceRecords, todayStr]);
+    }, [campsites, maintenanceRecords, todayStr, campsiteAvailabilities]);
 
     const selectedCampsite = campsites.find((c) => c.id === selectedCampsiteId);
 
@@ -166,16 +251,42 @@ export function BookingModal({
             width={640}
         >
             <Form form={form} layout="vertical" onValuesChange={handleValuesChange}>
+                {conflictWarning && (
+                    <Alert
+                        type="warning"
+                        showIcon
+                        message="预选营位不可用"
+                        description={conflictWarning}
+                        style={{ marginBottom: 16 }}
+                        closable
+                        onClose={() => setConflictWarning(null)}
+                    />
+                )}
+
+                <Form.Item
+                    name="dateRange"
+                    label="入住日期"
+                    rules={[{ required: true, message: "请先选择入住日期" }]}
+                    extra={!campsiteAvailabilities ? "请先选择入住日期，系统将自动显示各营位的可用状态" : ""}
+                >
+                    <DatePicker.RangePicker
+                        style={{ width: "100%" }}
+                        disabledDate={(current) => current && current < dayjs().startOf("day")}
+                        placeholder={["入住日期", "退房日期"]}
+                    />
+                </Form.Item>
+
                 <Form.Item
                     name="campsiteId"
                     label="选择营位"
                     rules={[{ required: true, message: "请选择营位" }]}
+                    extra={campsiteAvailabilities ? `已根据您选择的日期范围，自动标记不可预约的营位` : "请先选择入住日期"}
                 >
                     <Select
-                        placeholder="请选择营位"
+                        placeholder={campsiteAvailabilities ? "请选择营位（红色=已占用，橙色=维修中）" : "请先选择入住日期"}
                         options={campsiteOptions}
-                        onChange={(value) => setSelectedCampsiteId(value)}
                         optionFilterProp="label"
+                        disabled={!campsiteAvailabilities}
                     />
                 </Form.Item>
 
@@ -202,17 +313,6 @@ export function BookingModal({
                         </div>
                     </Card>
                 )}
-
-                <Form.Item
-                    name="dateRange"
-                    label="入住日期"
-                    rules={[{ required: true, message: "请选择入住日期" }]}
-                >
-                    <DatePicker.RangePicker
-                        style={{ width: "100%" }}
-                        disabledDate={(current) => current && current < dayjs().startOf("day")}
-                    />
-                </Form.Item>
 
                 <Form.Item
                     name="guestCount"
