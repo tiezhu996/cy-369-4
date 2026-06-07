@@ -74,3 +74,13 @@ export interface DayCampsiteStatus {
   maintenanceId?: string;
   maintenanceReason?: string;
 }
+
+import type { Dayjs } from "dayjs";
+
+export interface BookingFormValues {
+  campsiteId: string;
+  customerName: string;
+  phone: string;
+  dateRange: [Dayjs, Dayjs];
+  guestCount: number;
+}

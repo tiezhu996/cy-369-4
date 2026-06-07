@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom";
-import { expect } from "vitest";
+import { expect, vi } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
 
 expect.extend(matchers);
@@ -12,7 +12,7 @@ global.ResizeObserver = class ResizeObserver {
 
 Object.defineProperty(window, "matchMedia", {
     writable: true,
-    value: vi.fn().mockImplementation((query) => ({
+    value: vi.fn().mockImplementation((query: string) => ({
         matches: false,
         media: query,
         onchange: null,

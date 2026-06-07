@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { Modal, Form, Input, DatePicker, Select, InputNumber, Alert, Card, Tag } from "antd";
-import type { Campsite, Booking, MaintenanceRecord } from "../types";
+import type { Campsite, Booking, MaintenanceRecord, BookingFormValues } from "../types";
 import { isCampsiteAvailableForBooking, formatLocalDate, isDateInMaintenanceRange } from "../utils/calendarUtils";
-import dayjs, { Dayjs } from "dayjs";
+import dayjs from "dayjs";
 import type { FormInstance } from "antd";
 
 interface BookingModalProps {
@@ -15,14 +15,6 @@ interface BookingModalProps {
     onClose: () => void;
     onSubmit: (booking: Omit<Booking, "id" | "status">) => void;
     form?: FormInstance<BookingFormValues>;
-}
-
-interface BookingFormValues {
-    campsiteId: string;
-    customerName: string;
-    phone: string;
-    dateRange: [Dayjs, Dayjs];
-    guestCount: number;
 }
 
 export function BookingModal({
@@ -227,7 +219,6 @@ export function BookingModal({
             });
 
             form.resetFields();
-            setSelectedCampsiteId(undefined);
             setAvailabilityCheck(null);
         } catch {
             // Validation error
@@ -241,7 +232,6 @@ export function BookingModal({
             onCancel={() => {
                 onClose();
                 form.resetFields();
-                setSelectedCampsiteId(undefined);
                 setAvailabilityCheck(null);
             }}
             onOk={handleSubmit}

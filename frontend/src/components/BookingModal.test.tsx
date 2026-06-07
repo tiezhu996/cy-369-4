@@ -71,7 +71,13 @@ const defaultProps = {
     onSubmit: vi.fn(),
 };
 
-function renderWithForm(extraProps: Partial<typeof defaultProps> = {}) {
+type BookingModalTestProps = typeof defaultProps & {
+    preselectedCampsiteId?: string;
+    preselectedDate?: string;
+    form?: FormInstance<BookingFormValues>;
+};
+
+function renderWithForm(extraProps: Partial<BookingModalTestProps> = {}) {
     let formRef: FormInstance<BookingFormValues> | null = null;
     const user = userEvent.setup();
 
